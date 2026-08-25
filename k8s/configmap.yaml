@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: todolist-config
+  namespace: todolist
+data:
+  DB_HOST: "todolist-mysql"
+  DB_NAME: "todolist_db"
+  DB_USER: "todolist"
+  DB_PORT: "3306"
+  DB_DIALECT: "mysql"
+  PORT: "3000"
+  MYSQL_RANDOM_ROOT_PASSWORD: "true"

@@ -13,7 +13,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
 
-  backend-app:
+  todolist-backend:
     build:
       context: .
       dockerfile: Dockerfile

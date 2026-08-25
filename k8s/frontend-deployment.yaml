@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: todolist-frontend
-        image: <Image>
+        image: ghcr.io/redxops/projet-devops-frontend:latest
         resources:
           limits:
             memory: "128Mi"

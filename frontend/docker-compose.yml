@@ -1,5 +1,5 @@
 services:
-  angular-app:
+  todolist-frontend:
     build:
       context: .
       dockerfile: Dockerfile
