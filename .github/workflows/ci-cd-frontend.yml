@@ -82,3 +82,26 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    name: Deploy Frontend Image on AKS Cluster
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Set kubecontext
+        uses: azure/k8s-set-context@8698eba2499e9012f0d5085f8798077cce4bc526 # v5.0.1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Deploy Manifests
+        run: |
+          kubectl apply -f k8s/todolist-app/frontend-deployment.yaml
+          kubectl apply -f k8s/todolist-app/frontend-service.yaml
+          kubectl rollout restart deployment/todolist-frontend -n todolist
+          kubectl rollout status deployment/todolist-frontend -n todolist

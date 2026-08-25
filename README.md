@@ -319,3 +319,20 @@ jobs:
 - Les tests exécutés sur le backend ont besoin d'une base de données fonctionnelle, un conteneur `mysql` est donc monté sur le runner lors de la CI.
 - Les tests sont lancés avec l'argument `--runInBand` pour éviter les problèmes de conccurences entre les différents tests, ils se lancent donc un par un.
 
+
+# Notes k8s
+
+mdp grafana : 
+
+kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+
+kubectl create serviceaccount github-actions -n todolist
+
+creation permissions RBAC :
+kubectl create rolebinding github-actions-binding \
+  --clusterrole=edit \
+  --serviceaccount=todolist:github-actions \
+  -n todolist
+
+kubectl create token github-actions -n todolist --duration=87600h # 10 ans

@@ -1,0 +1,33 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todolist-frontend
+  namespace: todolist
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: todolist-frontend
+  template:
+    metadata:
+      labels:
+        app: todolist-frontend
+    spec:
+      containers:
+      - name: todolist-frontend
+        image: ghcr.io/redxops/projet-devops-frontend:latest
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+        ports:
+        - containerPort: 8080
