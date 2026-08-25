@@ -1,0 +1,36 @@
+services:
+  database:
+    image: mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: yes
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+     - 3306:3306
+    networks:
+      - backend_network
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    networks:
+      - backend_network
+      - frontend_network
+    env_file:
+      - .env
+
+networks:
+  backend_network:
+    internal: true
+  frontend_network:
+    external: true
+
+volumes:
+  mysql_data:

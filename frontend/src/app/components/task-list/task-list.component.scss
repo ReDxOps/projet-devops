@@ -1,0 +1,21 @@
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.task-card {
+  padding: 1rem;
+}
+
+.loading,
+.empty {
+  text-align: center;
+  margin-top: 2rem;
+  font-style: italic;
+}
+
+.filter-select {
+  width: 300px;
+  margin-bottom: 20px;
+}

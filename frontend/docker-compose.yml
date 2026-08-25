@@ -1,0 +1,19 @@
+services:
+  angular-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - frontend_network
+
+networks:
+  frontend_network:
+    name: frontend_network

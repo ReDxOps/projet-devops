@@ -1,0 +1,29 @@
+<h2>{{ isEdit ? 'Modifier une tâche' : 'Ajouter une tâche' }}</h2>
+
+<form [formGroup]="taskForm" (ngSubmit)="onSubmit()" class="form">
+  <mat-form-field appearance="outline">
+    <mat-label>Nom de la tâche</mat-label>
+    <input matInput formControlName="nom" required />
+    <mat-error *ngIf="taskForm.get('nom')?.hasError('required')">
+      Le nom est requis.
+    </mat-error>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Description</mat-label>
+    <textarea matInput formControlName="description"></textarea>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Statut</mat-label>
+    <mat-select formControlName="statut">
+      <mat-option *ngFor="let s of statutOptions" [value]="s">
+        {{ s }}
+      </mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <button mat-raised-button color="primary" type="submit" [disabled]="taskForm.invalid">
+    Ajouter la tâche
+  </button>
+</form>

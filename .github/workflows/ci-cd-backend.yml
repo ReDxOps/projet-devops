@@ -1,0 +1,106 @@
+name: CI/CD Backend
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-cd-backend.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-cd-backend.yml'
+    
+permissions: 
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    name: Run Backend Tests
+    defaults:
+      run:
+        working-directory: ./backend
+
+    services:
+      mysql:
+        image: mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
+        env:
+          MYSQL_DATABASE: todolist_db
+          MYSQL_USER: todolist
+          MYSQL_PASSWORD: testpassword
+          MYSQL_ROOT_PASSWORD: rootpassword
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u root -prootpassword"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      # Récupère le code du dépôt
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Configure Node.js pour l’environnement de test
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20 
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      # Installe les dépendances pour le job de test
+      - run: npm ci
+
+      # Exécute les tests unitaires
+      - name: Exécuter les tests unitaires
+        env:
+          DB_HOST: localhost
+          DB_USER: todolist
+          DB_PASSWORD: testpassword
+          DB_NAME: todolist_db
+          DB_DIALECT: mysql 
+        run: npm run test --runInBand # --runInBand pour éviter les problèmes de concurence entre les tests (se lancent un par un)
+
+  build-and-push:
+    needs: test
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    name: Build and Push Docker backend image
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}-backend
+          tags: |
+            type=sha
+            type=raw,value=latest
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

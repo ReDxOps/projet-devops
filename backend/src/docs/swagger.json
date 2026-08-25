@@ -1,0 +1,148 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ToDoList API",
+    "version": "1.0.0",
+    "description": "API REST mono-utilisateur pour la gestion de tâches"
+  },
+  "paths": {
+    "/api/tasks": {
+      "get": {
+        "summary": "Liste toutes les tâches",
+        "responses": {
+          "200": {
+            "description": "Liste des tâches"
+          }
+        }
+      },
+      "post": {
+        "summary": "Créer une nouvelle tâche",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nom": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "statut": {
+                    "type": "string",
+                    "enum": [
+                      "à faire",
+                      "en cours",
+                      "terminée"
+                    ]
+                  }
+                },
+                "required": [
+                  "nom"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tâche créée"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
+      "get": {
+        "summary": "Récupère une tâche par ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tâche trouvée"
+          },
+          "404": {
+            "description": "Tâche non trouvée"
+          }
+        }
+      },
+      "put": {
+        "summary": "Met à jour une tâche existante",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nom": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "statut": {
+                    "type": "string",
+                    "enum": [
+                      "à faire",
+                      "en cours",
+                      "terminée"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tâche mise à jour"
+          },
+          "404": {
+            "description": "Tâche non trouvée"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Supprime une tâche",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tâche supprimée"
+          },
+          "404": {
+            "description": "Tâche non trouvée"
+          }
+        }
+      }
+    }
+  }
+}
