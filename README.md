@@ -271,6 +271,9 @@ on:
 permissions: 
   contents: read
 
+env:
+  IMAGE_NAME: ghcr.io/redxops/projet-devops-frontend
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -323,7 +326,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}-frontend
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ github.sha }}
             type=raw,value=latest
@@ -369,7 +372,7 @@ jobs:
         run: |
           kubectl apply -f k8s/todolist-app/frontend-deployment.yaml
           kubectl apply -f k8s/todolist-app/frontend-service.yaml
-          kubectl set image deployment/todolist-frontend todolist-frontend=ghcr.io/${{ github.repository }}-frontend:${{ github.sha }} -n todolist
+          kubectl set image deployment/todolist-frontend todolist-frontend=${{ env.IMAGE_NAME }}:${{ github.sha }} -n todolist
           kubectl rollout status deployment/todolist-frontend -n todolist
 ```
 
@@ -392,6 +395,9 @@ on:
     
 permissions: 
   contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/redxops/projet-devops-backend
 
 jobs:
   test:
@@ -467,7 +473,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}-backend
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ github.sha }}
             type=raw,value=latest
@@ -513,7 +519,7 @@ jobs:
         run: |
           kubectl apply -f k8s/todolist-app/backend-deployment.yaml
           kubectl apply -f k8s/todolist-app/backend-service.yaml
-          kubectl set image deployment/todolist-backend todolist-backend=ghcr.io/${{ github.repository }}-backend:${{ github.sha }} -n todolist
+          kubectl set image deployment/todolist-backend todolist-backend=${{ env.IMAGE_NAME }}:${{ github.sha }} -n todolist
           kubectl rollout status deployment/todolist-backend -n todolist
 ```
 
