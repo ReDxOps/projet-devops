@@ -1,14 +1,135 @@
 # Déploiement de l'application ToDoList sur un cluster AKS
 
+Le projet a pour but d'industrialiser le déploiement de l'application ToDoList, Frontend Angular 15, Backend Node.js, et base de données MySQL.
 
-## Création de la BDD mysql
+Le projet suit ces directives :
+
+  - **Conteneurisation via Docker** avec deux images distinctes : frontend et backend.
+  - **Build et tests via CI/CD GitHub Actions** et stockage sur GitHub Container Registry (GHCR).
+  - **Infrastructure as Code (IaC) via Terraform** pour le provisionnement du cluster Azure Kubernetes Service (AKS) et le déploiement des charts Helm.
+  - **Déploiement continu des pods** sur le cluster AKS via CI/CD.
+  - **Monitoring du cluster** avec la stack Prometheus & Grafana.
+
+## Arborescence du projet
+```
+projet-devops/
+├── backend
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── README.MD
+│   ├── scriptSQL.sql
+│   ├── src
+│   │   ├── app.js
+│   │   ├── config
+│   │   ├── controllers
+│   │   ├── docs
+│   │   ├── models
+│   │   ├── routes
+│   │   ├── server.js
+│   │   └── services
+│   └── tests
+│       ├── integration
+│       └── unit
+├── frontend
+│   ├── angular.json
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── README.md
+│   ├── src
+│   │   ├── app
+│   │   ├── assets
+│   │   ├── environments
+│   │   ├── favicon.ico
+│   │   ├── index.html
+│   │   ├── main.ts
+│   │   └── styles.scss
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   └── tsconfig.spec.json
+├── iac
+│   ├── aks
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── providers.tf
+│   │   ├── variables.tf
+│   │   └── versions.tf
+│   ├── helm
+│   │   ├── main.tf
+│   │   ├── providers.tf
+│   │   ├── variables.tf
+│   │   └── versions.tf
+│   └── README.md
+├── k8s
+│   ├── gateway-api
+│   │   ├── gatewayclass.yaml
+│   │   ├── gateway.yaml
+│   │   └── httproute.yaml
+│   └── todolist-app
+│       ├── backend-deployment.yaml
+│       ├── backend-service.yaml
+│       ├── configmap.yaml
+│       ├── frontend-deployment.yaml
+│       ├── frontend-service.yaml
+│       ├── mysql-service.yaml
+│       ├── mysql-statefulset.yaml
+│       ├── namespace.yaml
+│       └── secret.yaml.example
+└── README.md
+```
+
+## Architecture Globale du projet
+
+```mermaid
+flowchart TB
+    A(["UTILISATEUR"]) --> B["IP PUBLIQUE AZURE"]
+
+    subgraph GW["Namespace: envoy-gateway-api"]
+        C["ENVOY GATEWAY API"]
+    end
+
+    subgraph MG["Namespace: monitoring"]
+        Prom["PROMETHEUS <br> Collecteur de Métriques K8s"]
+        Graf["GRAFANA <br> Visualisation Dashboards"]
+        Graf --> Prom
+    end
+
+    subgraph TDL["Namespace: todolist"]
+        D["PODS FRONTEND"]
+        E["PODS BACKEND"]
+        F[("BDD MYSQL STATEFULSET")]
+        G[("PVC DISQUE AZURE 1Gi")]
+        H["CONFIGMAP: todolist-config"]
+        I["SECRET: todolist-secret"]
+    end
+
+    %% Alignement de la Gateway et du Monitoring en haut côte à côte
+    B --> C
+    C ~~~ Graf
+
+    %% Flux vers l'application
+    C -- / Port 80 --> D
+    C -- /api Port 3000 --> E
+    E -- Port 3306 --> F
+    F --- G
+    H -.-> E & F
+    I -.-> E & F
+```
+
+## 1. Validation et Environnement Local (Docker)
+
+Avant d'industrialiser le déploiement sur AKS, une première phase de validation locale a été mise en place afin de tester le bon fonctionnement de l'application et la communication entre les composants.
 
 ``` yaml
 services:
   database:
     image: mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
     environment:
-      MYSQL_RANDOM_ROOT_PASSWORD: yes
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
@@ -16,6 +137,8 @@ services:
       - 3306:3306
     volumes:
       - mysql_data:/var/lib/mysql
+volumes:
+  mysql_data:
 
 ```
 **exemple de fichier .env backend / bdd avec user non-root :**
@@ -29,14 +152,14 @@ DB_DIALECT=mysql
 PORT=3000 # port api backend
 ```
 
-ps: pour lancer les tests du frontend sur WSL :
+Pour exécuter les tests unitaires Angular en local avec Chrome headless sur WSL :
 
 ``` bash
 sudo apt install -y chromium
 export CHROME_BIN=$(which chromium)
 ```
 
-## Création des Dockerfiles
+## 2. Création des Dockerfiles
 
 **Dockerfile backend :**
 
@@ -106,14 +229,14 @@ EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-- Utilisation d'un Dockerfile multi-stage dans le but de réduire la taille de l'image finale et la surface d'attaque, elle n'embarque donc que les assets complilés servis par Nginx.
-- `npm ci` utilisé à la palce de `npm install`, best practice pour des builds reproductibles en utilisant le package-lock.json.
-- Utilisation de version d'images Docker avec Digest Pinning, ce qui garantie de toujours utiliser la même image.
-- utilisation de l'image `nginxinc/nginx-unprivileged` (rootless) pour exécuter le conteneur avec l'utilisateur `nginx` plutôt que `root`.
+- Utilisation d'un Dockerfile multi-stage dans le but de réduire la taille de l'image finale et la surface d'attaque, elle n'embarque donc que les assets compilés servis par Nginx.
+- `npm ci` utilisé à la place de `npm install`, best practice pour des builds reproductibles en utilisant le package-lock.json.
+- Utilisation de version d'images Docker avec Digest Pinning, ce qui garantit de toujours utiliser la même image.
+- Utilisation de l'image `nginxinc/nginx-unprivileged` (rootless) pour exécuter le conteneur avec l'utilisateur `nginx` plutôt que `root`.
 
-## CI / CD et repository
+## 3. Intégration et Déploiement Continus (CI/CD)
 
-Côté backend le dossier `node_modules` et `.env` ont été exclus du repository en mettant en place un `.env.example` (evite de surcharger le dépot avec + de 800 000 fichiers de dépendances et éviter de versionner les secrets) : 
+Côté backend le dossier `node_modules` et `.env` ont été exclus du repository en mettant en place un `.env.example` (évite de surcharger le dépôt avec + de 800 000 fichiers de dépendances et d'éviter de versionner les secrets) : 
 
 ``` bash
 DB_HOST=database
@@ -124,17 +247,26 @@ DB_DIALECT=mysql
 PORT=3000
 ```
 
-### CI / CD Frontend
+### Pipelines CI/CD GitHub Actions
 
+Chaque pipeline (`ci-cd-frontend.yml` et `ci-cd-backend.yml`) est structuré en 3 jobs distincts conditionnés :
 
-``` yaml
+**Pipeline frontend :**
+
+``` yaml 
 name: CI/CD Frontend
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/ci-cd-frontend.yml'
   pull_request:
-    branches: [master]
+    branches: [master, main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/ci-cd-frontend.yml'
 
 permissions: 
   contents: read
@@ -143,6 +275,9 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     name: Run Frontend Tests
+    defaults:
+      run:
+        working-directory: ./frontend
     steps:
       # Récupère le code du dépôt
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -152,6 +287,7 @@ jobs:
         with:
           node-version: 20 
           cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
       # Installe les dépendances pour le job de test
       - run: npm ci
@@ -162,7 +298,7 @@ jobs:
 
   build-and-push:
     needs: test
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
     runs-on: ubuntu-24.04
     name: Build and Push Docker frontend image
     permissions:
@@ -187,52 +323,83 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}-frontend
           tags: |
-            type=sha
+            type=raw,value=${{ github.sha }}
             type=raw,value=latest
 
       - name: Build and push frontend image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: .
-          file: Dockerfile
+          context: ./frontend
+          file: ./frontend/Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy:
+    needs: build-and-push
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    name: Deploy Frontend Image on AKS Cluster
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AZURE_CLUSTER_NAME }}
+
+      - name: Deploy Manifests
+        run: |
+          kubectl apply -f k8s/todolist-app/frontend-deployment.yaml
+          kubectl apply -f k8s/todolist-app/frontend-service.yaml
+          kubectl set image deployment/todolist-frontend todolist-frontend=ghcr.io/${{ github.repository }}-frontend:${{ github.sha }} -n todolist
+          kubectl rollout status deployment/todolist-frontend -n todolist
 ```
 
-- Le job test n'a pas été modifié par rapport au fork.
-- Intégration du job `build-and-push` avec la condition `needs: test`, déclenché uniquement lors d'un `push` sur la branche `master` avec différents steps:
-
-  1. Checkout du code sur le runner
-  2. Login sur GHCR grâce au secret fourni automatiquement `GITHUB_TOKEN`
-  3. Setup de Docker Buildx
-  4. Utilisation de l'action Docker metadata pour normaliser le nom de l'image finale et la mise en place de deux tags différents : `latest` sur chaque dernière image et le `sha du commit`
-  5. Build and push de l'image Docker sur GHCR
-
-### CI / CD Backend
-
-Création de la CI/CD de 0 (aucun fichier présent lors du fork).
+**Pipeline backend :**
 
 ``` yaml
 name: CI/CD Backend
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-cd-backend.yml'
   pull_request:
-    branches: [master]
-
+    branches: [master, main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-cd-backend.yml'
+    
 permissions: 
   contents: read
 
 jobs:
   test:
     runs-on: ubuntu-24.04
+    name: Run Backend Tests
+    defaults:
+      run:
+        working-directory: ./backend
 
     services:
       mysql:
@@ -258,6 +425,7 @@ jobs:
         with:
           node-version: 20 
           cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
 
       # Installe les dépendances pour le job de test
       - run: npm ci
@@ -274,7 +442,7 @@ jobs:
 
   build-and-push:
     needs: test
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
     runs-on: ubuntu-24.04
     name: Build and Push Docker backend image
     permissions:
@@ -299,40 +467,190 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}-backend
           tags: |
-            type=sha
+            type=raw,value=${{ github.sha }}
             type=raw,value=latest
 
       - name: Build and push backend image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: .
-          file: Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  
+  deploy:
+    needs: build-and-push
+    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    name: Deploy Backend Image on AKS Cluster
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AZURE_CLUSTER_NAME }}
+
+      - name: Deploy Manifests
+        run: |
+          kubectl apply -f k8s/todolist-app/backend-deployment.yaml
+          kubectl apply -f k8s/todolist-app/backend-service.yaml
+          kubectl set image deployment/todolist-backend todolist-backend=ghcr.io/${{ github.repository }}-backend:${{ github.sha }} -n todolist
+          kubectl rollout status deployment/todolist-backend -n todolist
 ```
 
-- Les tests exécutés sur le backend ont besoin d'une base de données fonctionnelle, un conteneur `mysql` est donc monté sur le runner lors de la CI.
-- Les tests sont lancés avec l'argument `--runInBand` pour éviter les problèmes de conccurences entre les différents tests, ils se lancent donc un par un.
+### Points clés et choix d'architecture CI/CD :
+
+- Le build et le déploiement ne s'exécutent **que si 100% des tests unitaires réussissent** grâce à la directive `needs: test`.
+- Création d'un conteneur de service MySQL 9.7 temporaire sur le runner GitHub Actions pour l'exécution des tests unitaires du backend.
+- Exécution des tests backend avec l'argument `--runInBand` pour éviter les accès concurrents à la base de données (les tests se lancent un par un).
+- Actions GitHub épinglées par commit SHA (`actions/checkout@3d3c42...`).
+- Optimisation des temps de build Docker grâce au cache GitHub Actions (`type=gha`) et double tag (`latest` et le `sha exact du commit`).
+- Authentification via OIDC, éliminant le besoin de stocker un fichier Kubeconfig statique dans les secrets.
+- Déploiement via `kubectl set image` avec le SHA du commit, assurant la traçabilité et permettant des rollbacks Kubernetes.
+- Monitoring du déploiement via `kubectl rollout status` (la pieline échoue automatiquement si un pod crash au démarrage).
 
 
-# Notes k8s
+## 4. Infrastructure as Code avec Terraform
 
-mdp grafana : 
+L'ensemble de l'infrastructure Cloud est provisionné et géré de manière déclarative via **Terraform**.
 
+### Organisation du dossier `iac/` :
+
+```
+iac/
+├── aks
+│   ├── identity.tf
+│   ├── main.tf
+│   ├── outputs.tf
+│   ├── providers.tf
+│   ├── variables.tf
+│   └── versions.tf
+├── helm
+│   ├── main.tf
+│   ├── providers.tf
+│   ├── variables.tf
+│   └── versions.tf
+└── README.md
+```
+
+### Choix techniques et déploiement IaC :
+- Application du tag obligatoire `user = "RDubois2025"` sur l'ensemble des ressources Azure créées.
+- Dimensionnement du cluster AKS sur 2 nœuds `Standard_B2ms` (2 vCPU et 8 Go de RAM au total).
+- Création de l'identité managée (`uai-github-actions`) et de la fédération OIDC GitHub Actions dans `identity.tf`.
+- Séparation des cycles de vie entre le cluster AKS (`iac/aks/`) et le provisionnement des charts Helm (`iac/helm/`).
+- Déploiement automatisé d'Envoy Gateway et de la suite Prometheus & Grafana via le provider Terraform Helm.
+
+### Guide de déploiement de l'infrastructure :
+
+#### 1. Provisionner le cluster AKS :
+
+```bash
+cd iac/aks
+terraform init
+terraform plan
+terraform apply
+```
+
+#### 2. Récupérer le contexte Kubernetes :
+
+```bash
+az aks get-credentials --resource-group nom_du_resources_group --name nom_du_cluster_aks --overwrite-existing
+```
+
+#### 3. Déployer les charts Helm (Gateway API & Monitoring) :
+
+```bash
+cd ../helm
+terraform init
+terraform plan
+terraform apply
+```
+
+## 5. Déploiement et Orchestration Kubernetes
+
+L'ensemble des manifests Kubernetes est organisé dans le dossier `k8s/`.
+
+### Organisation du dossier `k8s/` :
+
+```text
+k8s/
+├── gateway-api
+│   ├── gateway.yaml
+│   ├── gatewayclass.yaml
+│   └── httproute.yaml
+└── todolist-app
+    ├── backend-deployment.yaml
+    ├── backend-service.yaml
+    ├── configmap.yaml
+    ├── frontend-deployment.yaml
+    ├── frontend-service.yaml
+    ├── mysql-service.yaml
+    ├── mysql-statefulset.yaml
+    ├── namespace.yaml
+    └── secret.yaml.example
+```
+
+### Choix techniques et architecture Kubernetes :
+
+- Utilisation d'un `StatefulSet` avec `volumeClaimTemplates` (disque Azure Disk persistant de 1 Go) pour MySQL afin de garantir la persistance des données lors du redémarrage des pods.
+- Déploiement de 2 replicas pour le frontend et de 2 replicas pour le backend avec RollingUpdate.
+- Utilisation de **Kubernetes Gateway API (Envoy Gateway)** via des ressources `Gateway` et `HTTPRoute`, remplaçant l'ancien Ingress NGINX (déprécié fin 2026).
+- Les requêtes commençant par `/api` sont aiguillées vers le backend (Port 3000) et toutes les autres requêtes `/` sont redirigées vers le frontend (Port 80).
+- Gestion sécurisée des identifiants avec séparation entre `ConfigMap` (variables applicatives non sensibles) et `Secret` (mot de passe de base de données).
+- Versionnement d'un fichier modèle `secret.yaml.example` dans Git pour éviter toute exposition accidentelle de mots de passe de production.
+
+## 6. Supervision et Monitoring (Prometheus & Grafana)
+
+La supervision du cluster et des conteneurs est assurée par la suite **kube-prometheus-stack** déployée via Helm dans le namespace dédié `monitoring`.
+
+### Choix techniques de supervision :
+
+- Collecte des métriques d'infrastructure des nœuds AKS (`node-exporter`).
+- Collecte de l'état de santé des pods Kubernetes (`kube-state-metrics`).
+- Tableaux de bord visuels préconfigurés dans Grafana.
+
+### Accès à l'interface Web de Grafana :
+
+#### 1. Ouvrir l'accès local via Port-Forward :
+
+```bash
+kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
+```
+*(Accès web sur `http://localhost:3001`)*
+
+#### 2. Récupérer le mot de passe administrateur :
+
+L'identifiant par défaut est `admin`. Le mot de passe généré automatiquement se récupère avec la commande :
+
+```bash
 kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+```
+
+## 7. Difficultés rencontrées
+
+- **Prise en main de la Gateway API** : N'ayant jamais manipulé cette nouvelle norme remplaçant les Ingress, j'ai dû appréhender la logique des ressources assez complex à comprendre au début.
+
+- **Concurrence des tests backend** : J'ai rencontré des échecs lors des tests Jest en CI car ils s'exécutaient en parallèle sur la base MySQL. J'ai résolu le problème avec l'argument `--runInBand` pour forcer une exécution séquentielle.
+
+- **Sécurisation des accès et des secrets** : Pour automatiser le déploiement sans stocker de mot de passe ou de fichier Kubeconfig statique dans Git, j'ai configuré l'authentification OIDC via une identité managée Azure et utilisé des fichiers `.example` pour les secrets applicatifs. L'intégration d'Azure Key Vault aurait été une alternative d'architecture envisageable, mais overkill pour la gestion d'un unique secret applicatif.
 
 
-kubectl create serviceaccount github-actions -n todolist
-
-creation permissions RBAC :
-kubectl create rolebinding github-actions-binding \
-  --clusterrole=edit \
-  --serviceaccount=todolist:github-actions \
-  -n todolist
-
-kubectl create token github-actions -n todolist --duration=87600h # 10 ans

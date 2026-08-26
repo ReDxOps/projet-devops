@@ -52,6 +52,20 @@ Vérifier l'accès aux nœuds :
 kubectl get nodes
 ```
 
+## Authentification CI/CD (OIDC)
+
+L'infrastructure provisionne également une identité managée (`identity.tf`) avec fédération OIDC pour GitHub Actions.
+
+Récupérer l'identifiant client pour la CI :
+```bash
+terraform output azure_client_id
+```
+
+Récupérer le tenant et subscription id pour la CI :
+```bash
+az account show
+```
+
 ## Destruction
 
 Supprimer l'ensemble des ressources provisionnées :
