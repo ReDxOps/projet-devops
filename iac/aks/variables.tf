@@ -31,14 +31,14 @@ variable "sku_tier" {
 
 variable "github_handle" {
   type        = string
-  description = "Nom du compte GitHub."
-  default     = "ReDxOps"
+  description = "Nom ou identifiant du compte GitHub."
+  default     = "ReDxOps@107931401"
 }
 
 variable "github_repository" {
   type        = string
-  description = "Nom du dépôt GitHub."
-  default     = "projet-devops"
+  description = "Nom ou identifiant du dépôt GitHub."
+  default     = "projet-devops@1345106621"
 }
 
 variable "github_branch" {
