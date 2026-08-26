@@ -18,3 +18,9 @@ output "resource_group_name" {
   description = "The resource group containing the AKS cluster."
   value       = data.azurerm_resource_group.this.name
 }
+
+output "azure_client_id" {
+  description = "Client ID de la Managed Identity pour l'authentification GitHub Actions OIDC."
+  value       = azurerm_user_assigned_identity.github_actions.client_id
+}
+

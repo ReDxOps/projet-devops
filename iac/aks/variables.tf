@@ -28,3 +28,21 @@ variable "sku_tier" {
   type    = string
   default = "Free"
 }
+
+variable "github_handle" {
+  type        = string
+  description = "Nom du compte GitHub."
+  default     = "ReDxOps"
+}
+
+variable "github_repository" {
+  type        = string
+  description = "Nom du dépôt GitHub."
+  default     = "projet-devops"
+}
+
+variable "github_branch" {
+  type        = string
+  description = "Branche autorisée pour la fédération OIDC."
+  default     = "main"
+}
